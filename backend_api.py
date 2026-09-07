@@ -482,16 +482,12 @@ def generation_status(job_id):
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
 
-    threading.Thread(target=load_musicgen_background, daemon=True).start()
+    # Don't load model on startup - load it on first use
+    # threading.Thread(target=load_musicgen_background, daemon=True).start()
 
     print()
     print("=" * 70)
-    print("SOUNDFORGE AI MUSIC GENERATOR")
-    print("=" * 70)
-    print("Host: 0.0.0.0")
-    print("Port:", port)
-    print("AI Provider: Local MusicGen")
-    print("Model: facebook/musicgen-small")
+    print("SOUNDFORGE - Ready to generate!")
     print("=" * 70)
     print()
 
