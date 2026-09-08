@@ -3,15 +3,15 @@
 // ============================================================
 
 // ============================================================
-// BACKEND API CONFIGURATION
-// When deployed on Railway, frontend and backend are on same domain
-// So we use relative paths (empty API_BASE)
+// LOCAL BACKEND
+// Frontend is served directly by the local Flask backend.
 // ============================================================
 
 const API_BASE = "";
 
 // ============================================================
 // ORIGINAL 4 TRACKS
+// THESE MUST ALWAYS STAY SEPARATE FROM MY LIBRARY
 // ============================================================
 
 const originalTracks = [
@@ -58,652 +58,1210 @@ let currentTrack = null;
 let currentOriginalIndex = 0;
 let audioPlayer = null;
 
-// ============================================================
-// RESOLVE AUDIO URL
-// ============================================================
-
-function resolveAudioUrl(filePath) {
-    if (!filePath) {
-        return "";
-    }
-
-    const file = String(filePath).trim();
-
-    if (file.startsWith("http://") || file.startsWith("https://")) {
-        return file;
-    }
-
-    if (file.startsWith("/")) {
-        return file;
-    }
-
-    return `/${file}`;
-}
 
 // ============================================================
 // GET AUDIO PLAYER
 // ============================================================
 
 function getAudioPlayer() {
+
     if (!audioPlayer) {
-        audioPlayer = document.getElementById("audioPlayer");
+        audioPlayer =
+            document.getElementById(
+                "audioPlayer"
+            );
     }
+
     return audioPlayer;
 }
+
 
 // ============================================================
 // PAGE NAVIGATION
 // ============================================================
 
 function goToPage(pageName) {
-    document.querySelectorAll(".page").forEach(page => {
-        page.classList.remove("active-page");
+
+    document.querySelectorAll(
+        ".page"
+    ).forEach(page => {
+
+        page.classList.remove(
+            "active-page"
+        );
     });
 
-    const selectedPage = document.getElementById(pageName);
+    const selectedPage =
+        document.getElementById(
+            pageName
+        );
+
     if (selectedPage) {
-        selectedPage.classList.add("active-page");
+
+        selectedPage.classList.add(
+            "active-page"
+        );
     }
 
-    document.querySelectorAll(".nav-link").forEach(button => {
-        button.classList.remove("active");
-        const text = button.textContent.trim().toLowerCase();
+    document.querySelectorAll(
+        ".nav-link"
+    ).forEach(button => {
+
+        button.classList.remove(
+            "active"
+        );
+
+        const text =
+            button.textContent
+                .trim()
+                .toLowerCase();
 
         if (
-            (pageName === "home" && text === "home") ||
-            (pageName === "generate" && text === "generate") ||
-            (pageName === "tracks" && text === "generated tracks") ||
-            (pageName === "library" && text === "my library") ||
-            (pageName === "about" && text === "about")
+            (pageName === "home" &&
+                text === "home") ||
+
+            (pageName === "generate" &&
+                text === "generate") ||
+
+            (pageName === "tracks" &&
+                text === "generated tracks") ||
+
+            (pageName === "library" &&
+                text === "my library") ||
+
+            (pageName === "about" &&
+                text === "about")
         ) {
-            button.classList.add("active");
+
+            button.classList.add(
+                "active"
+            );
         }
     });
 
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    window.scrollTo({
+        top: 0,
+        behavior: "smooth"
+    });
 }
 
+
 // ============================================================
-// RENDER ORIGINAL TRACKS
+// ORIGINAL TRACKS
 // ============================================================
 
 function renderOriginalTracks() {
-    const grid = document.getElementById("originalTracksGrid");
+
+    const grid =
+        document.getElementById(
+            "originalTracksGrid"
+        );
 
     if (!grid) {
-        console.error("originalTracksGrid not found.");
+
+        console.error(
+            "originalTracksGrid not found."
+        );
+
         return;
     }
 
     grid.innerHTML = "";
 
-    originalTracks.forEach((track, index) => {
-        const card = document.createElement("div");
-        card.className = "track-card";
+    originalTracks.forEach(
+        (track, index) => {
 
-        card.innerHTML = `
-            <div class="track-icon">${track.icon}</div>
-            <div class="track-details">
-                <h3>${escapeHTML(track.title)}</h3>
-                <p>${escapeHTML(track.genre)}</p>
-                <small>${escapeHTML(track.duration)}</small>
-            </div>
-            <div class="track-actions">
-                <button type="button" onclick="playOriginalTrack(${index})" title="Play">▶</button>
-                <button type="button" onclick="openPlayerForOriginal(${index})" title="Open Player">🎧</button>
-            </div>
-        `;
+            const card =
+                document.createElement(
+                    "div"
+                );
 
-        grid.appendChild(card);
-    });
+            card.className =
+                "track-card";
 
-    console.log("Original 4 tracks rendered:", originalTracks.length);
+            card.innerHTML = `
+                <div class="track-icon">
+                    ${track.icon}
+                </div>
+
+                <div class="track-details">
+                    <h3>
+                        ${escapeHTML(
+                            track.title
+                        )}
+                    </h3>
+
+                    <p>
+                        ${escapeHTML(
+                            track.genre
+                        )}
+                    </p>
+
+                    <small>
+                        ${escapeHTML(
+                            track.duration
+                        )}
+                    </small>
+                </div>
+
+                <div class="track-actions">
+
+                    <button
+                        type="button"
+                        onclick="playOriginalTrack(${index})"
+                        title="Play"
+                    >
+                        ▶
+                    </button>
+
+                    <button
+                        type="button"
+                        onclick="openPlayerForOriginal(${index})"
+                        title="Open Player"
+                    >
+                        🎧
+                    </button>
+
+                </div>
+            `;
+
+            grid.appendChild(
+                card
+            );
+        }
+    );
+
+    console.log(
+        "Original 4 tracks rendered:",
+        originalTracks.length
+    );
 }
 
+
 // ============================================================
-// RENDER LIBRARY
+// LIBRARY
 // ============================================================
 
 function renderLibrary() {
-    const grid = document.getElementById("libraryGrid");
+
+    const grid =
+        document.getElementById(
+            "libraryGrid"
+        );
 
     if (!grid) {
-        console.error("libraryGrid not found.");
+
+        console.error(
+            "libraryGrid not found."
+        );
+
         return;
     }
 
-    if (!Array.isArray(generatedTracks)) {
+    if (
+        !Array.isArray(
+            generatedTracks
+        )
+    ) {
+
         generatedTracks = [];
     }
 
-    if (generatedTracks.length === 0) {
+    if (
+        generatedTracks.length === 0
+    ) {
+
         grid.innerHTML = `
             <div class="library-empty">
-                <div>🎧</div>
-                <h3>Your library is empty</h3>
-                <p>Generate your first AI track and it will appear here.</p>
-                <button type="button" class="primary-btn" onclick="goToPage('generate')">
+
+                <div>
+                    🎧
+                </div>
+
+                <h3>
+                    Your library is empty
+                </h3>
+
+                <p>
+                    Generate your first AI track
+                    and it will appear here.
+                </p>
+
+                <button
+                    type="button"
+                    class="primary-btn"
+                    onclick="goToPage('generate')"
+                >
                     Create Your First Track
                 </button>
+
             </div>
         `;
+
         return;
     }
 
     grid.innerHTML = "";
 
-    generatedTracks.forEach((track, index) => {
-        const card = document.createElement("div");
-        card.className = "track-card";
+    generatedTracks.forEach(
+        (track, index) => {
 
-        card.innerHTML = `
-            <div class="track-icon">${track.icon || "✨"}</div>
-            <div class="track-details">
-                <h3>${escapeHTML(track.title || "AI Generated Track")}</h3>
-                <p>${escapeHTML(track.genre || "Music")}</p>
-                <small>${escapeHTML(track.duration || "AI Generated")}</small>
-            </div>
-            <div class="track-actions">
-                <button type="button" onclick="playGeneratedTrack(${index})" title="Play">▶</button>
-                <button type="button" onclick="openGeneratedPlayer(${index})" title="Open Player">🎧</button>
-            </div>
-        `;
+            const card =
+                document.createElement(
+                    "div"
+                );
 
-        grid.appendChild(card);
-    });
+            card.className =
+                "track-card";
+
+            card.innerHTML = `
+                <div class="track-icon">
+                    ${track.icon || "✨"}
+                </div>
+
+                <div class="track-details">
+
+                    <h3>
+                        ${escapeHTML(
+                            track.title ||
+                            "AI Generated Track"
+                        )}
+                    </h3>
+
+                    <p>
+                        ${escapeHTML(
+                            track.genre ||
+                            "Music"
+                        )}
+                    </p>
+
+                    <small>
+                        ${escapeHTML(
+                            track.duration ||
+                            "AI Generated"
+                        )}
+                    </small>
+
+                </div>
+
+                <div class="track-actions">
+
+                    <button
+                        type="button"
+                        onclick="playGeneratedTrack(${index})"
+                        title="Play"
+                    >
+                        ▶
+                    </button>
+
+                    <button
+                        type="button"
+                        onclick="openGeneratedPlayer(${index})"
+                        title="Open Player"
+                    >
+                        🎧
+                    </button>
+
+                </div>
+            `;
+
+            grid.appendChild(
+                card
+            );
+        }
+    );
 }
 
+
 // ============================================================
-// LOAD LIBRARY FROM SERVER
+// LOAD LIBRARY FROM LOCAL BACKEND
 // ============================================================
 
 async function loadLibraryFromServer() {
+
     try {
-        const response = await fetch(`${API_BASE}/api/library`, {
-            method: "GET",
-            cache: "no-store"
-        });
+
+        const response =
+            await fetch(
+                "/api/library",
+                {
+                    method: "GET",
+                    cache: "no-store"
+                }
+            );
 
         if (!response.ok) {
-            throw new Error(`Library request failed: ${response.status}`);
+
+            throw new Error(
+                `Library request failed: ${response.status}`
+            );
         }
 
-        const data = await response.json();
+        const data =
+            await response.json();
 
-        if (data && data.success === true && Array.isArray(data.tracks)) {
-            generatedTracks = data.tracks.map(track => ({
-                ...track,
-                file: resolveAudioUrl(track.file)
-            }));
+        if (
+            data &&
+            data.success === true &&
+            Array.isArray(
+                data.tracks
+            )
+        ) {
+
+            generatedTracks =
+                data.tracks;
 
             renderLibrary();
-            console.log("Saved AI library loaded:", generatedTracks.length, "tracks");
+
+            console.log(
+                "Saved AI library loaded:",
+                generatedTracks.length,
+                "tracks"
+            );
+
         } else {
+
             generatedTracks = [];
+
             renderLibrary();
-            console.warn("Backend returned an invalid library response.");
         }
+
     } catch (error) {
-        console.error("Library loading error:", error);
+
+        console.error(
+            "Library loading error:",
+            error
+        );
+
         generatedTracks = [];
+
         renderLibrary();
     }
 }
+
 
 // ============================================================
 // PLAY ORIGINAL TRACK
 // ============================================================
 
 function playOriginalTrack(index) {
-    const track = originalTracks[index];
+
+    const track =
+        originalTracks[index];
 
     if (!track) {
-        console.error("Original track not found:", index);
+
+        console.error(
+            "Original track not found:",
+            index
+        );
+
         return;
     }
 
-    const player = getAudioPlayer();
+    const player =
+        getAudioPlayer();
 
     if (!player) {
-        console.error("audioPlayer element not found.");
+
+        console.error(
+            "audioPlayer element not found."
+        );
+
         return;
     }
 
-    currentOriginalIndex = index;
-    currentTrack = track;
+    currentOriginalIndex =
+        index;
 
-    const audioUrl = resolveAudioUrl(track.file);
+    currentTrack =
+        track;
 
-    console.log("Playing original track:", audioUrl);
+    console.log(
+        "Playing original track:",
+        track.file
+    );
 
     player.pause();
-    player.removeAttribute("src");
+
+    player.src =
+        track.file;
+
     player.load();
-    player.src = audioUrl;
-    player.load();
 
-    updatePlayerInformation(track);
+    updatePlayerInformation(
+        track
+    );
 
-    const playPromise = player.play();
+    player.play()
+        .then(() => {
 
-    if (playPromise) {
-        playPromise
-            .then(() => updatePlayButtons(true))
-            .catch(error => {
-                console.error("Original track playback error:", error);
-                updatePlayButtons(false);
-            });
-    }
+            updatePlayButtons(
+                true
+            );
+
+        })
+        .catch(error => {
+
+            console.error(
+                "Original track playback error:",
+                error
+            );
+
+            updatePlayButtons(
+                false
+            );
+        });
 }
+
 
 // ============================================================
 // OPEN ORIGINAL PLAYER
 // ============================================================
 
 function openPlayerForOriginal(index) {
-    playOriginalTrack(index);
-    goToPage("player");
+
+    playOriginalTrack(
+        index
+    );
+
+    goToPage(
+        "player"
+    );
 }
+
 
 // ============================================================
 // PLAY GENERATED TRACK
 // ============================================================
 
 function playGeneratedTrack(index) {
-    const track = generatedTracks[index];
+
+    const track =
+        generatedTracks[index];
 
     if (!track) {
-        console.error("Generated track not found:", index);
+
+        console.error(
+            "Generated track not found:",
+            index
+        );
+
         return;
     }
 
     if (!track.file) {
-        console.error("Generated track has no audio file:", track);
+
+        console.error(
+            "Generated track has no audio file:",
+            track
+        );
+
         return;
     }
 
-    const player = getAudioPlayer();
+    const player =
+        getAudioPlayer();
 
     if (!player) {
-        console.error("audioPlayer element not found.");
+
+        console.error(
+            "audioPlayer element not found."
+        );
+
         return;
     }
 
-    currentTrack = track;
+    currentTrack =
+        track;
 
-    const audioUrl = resolveAudioUrl(track.file);
-
-    console.log("Playing generated track:", audioUrl);
+    console.log(
+        "Playing generated track:",
+        track.file
+    );
 
     player.pause();
-    player.removeAttribute("src");
+
+    player.src =
+        track.file;
+
     player.load();
-    player.src = audioUrl;
-    player.load();
 
-    updatePlayerInformation(track);
+    updatePlayerInformation(
+        track
+    );
 
-    const playPromise = player.play();
+    player.play()
+        .then(() => {
 
-    if (playPromise) {
-        playPromise
-            .then(() => updatePlayButtons(true))
-            .catch(error => {
-                console.error("Generated track playback error:", error);
-                updatePlayButtons(false);
-            });
-    }
+            updatePlayButtons(
+                true
+            );
+
+        })
+        .catch(error => {
+
+            console.error(
+                "Generated track playback error:",
+                error
+            );
+
+            updatePlayButtons(
+                false
+            );
+        });
 }
+
 
 // ============================================================
 // OPEN GENERATED PLAYER
 // ============================================================
 
 function openGeneratedPlayer(index) {
-    playGeneratedTrack(index);
-    goToPage("player");
+
+    playGeneratedTrack(
+        index
+    );
+
+    goToPage(
+        "player"
+    );
 }
 
+
 // ============================================================
-// UPDATE PLAYER INFORMATION
+// PLAYER INFORMATION
 // ============================================================
 
-function updatePlayerInformation(track) {
-    if (!track) return;
+function updatePlayerInformation(
+    track
+) {
 
-    const playerTitle = document.getElementById("playerTitle");
-    const playerGenre = document.getElementById("playerGenre");
-    const miniTitle = document.getElementById("miniTitle");
-    const miniGenre = document.getElementById("miniGenre");
+    if (!track) {
+        return;
+    }
 
-    if (playerTitle) playerTitle.textContent = track.title || "Unknown Track";
-    if (playerGenre) playerGenre.textContent = track.genre || "Music";
-    if (miniTitle) miniTitle.textContent = track.title || "Unknown Track";
-    if (miniGenre) miniGenre.textContent = track.genre || "Music";
+    const playerTitle =
+        document.getElementById(
+            "playerTitle"
+        );
+
+    const playerGenre =
+        document.getElementById(
+            "playerGenre"
+        );
+
+    const miniTitle =
+        document.getElementById(
+            "miniTitle"
+        );
+
+    const miniGenre =
+        document.getElementById(
+            "miniGenre"
+        );
+
+    if (playerTitle) {
+
+        playerTitle.textContent =
+            track.title ||
+            "Unknown Track";
+    }
+
+    if (playerGenre) {
+
+        playerGenre.textContent =
+            track.genre ||
+            "Music";
+    }
+
+    if (miniTitle) {
+
+        miniTitle.textContent =
+            track.title ||
+            "Unknown Track";
+    }
+
+    if (miniGenre) {
+
+        miniGenre.textContent =
+            track.genre ||
+            "Music";
+    }
 }
+
 
 // ============================================================
 // TOGGLE PLAY / PAUSE
 // ============================================================
 
 function togglePlay() {
-    const player = getAudioPlayer();
 
-    if (!player || !player.src) {
+    const player =
+        getAudioPlayer();
+
+    if (
+        !player ||
+        !player.src
+    ) {
         return;
     }
 
     if (player.paused) {
-        const playPromise = player.play();
 
-        if (playPromise) {
-            playPromise
-                .then(() => updatePlayButtons(true))
-                .catch(error => console.error("Playback error:", error));
-        }
+        player.play()
+            .then(() => {
+
+                updatePlayButtons(
+                    true
+                );
+
+            })
+            .catch(error => {
+
+                console.error(
+                    "Playback error:",
+                    error
+                );
+            });
+
     } else {
+
         player.pause();
-        updatePlayButtons(false);
+
+        updatePlayButtons(
+            false
+        );
     }
 }
 
+
 // ============================================================
-// UPDATE PLAY BUTTONS
+// UPDATE PLAY BUTTON
 // ============================================================
 
-function updatePlayButtons(isPlaying) {
-    const miniPlay = document.getElementById("miniPlay");
+function updatePlayButtons(
+    isPlaying
+) {
+
+    const miniPlay =
+        document.getElementById(
+            "miniPlay"
+        );
 
     if (miniPlay) {
-        miniPlay.textContent = isPlaying ? "⏸" : "▶";
+
+        miniPlay.textContent =
+            isPlaying
+                ? "⏸"
+                : "▶";
     }
 }
 
+
 // ============================================================
-// PREVIOUS TRACK
+// PREVIOUS ORIGINAL TRACK
 // ============================================================
 
 function previousTrack() {
-    if (originalTracks.length === 0) return;
 
-    currentOriginalIndex--;
-
-    if (currentOriginalIndex < 0) {
-        currentOriginalIndex = originalTracks.length - 1;
-    }
-
-    playOriginalTrack(currentOriginalIndex);
-}
-
-// ============================================================
-// NEXT TRACK
-// ============================================================
-
-function nextTrack() {
-    if (originalTracks.length === 0) return;
-
-    currentOriginalIndex++;
-
-    if (currentOriginalIndex >= originalTracks.length) {
-        currentOriginalIndex = 0;
-    }
-
-    playOriginalTrack(currentOriginalIndex);
-}
-
-// ============================================================
-// SETUP AUDIO EVENTS
-// ============================================================
-
-function setupAudioEvents() {
-    const player = getAudioPlayer();
-
-    if (!player) {
-        console.warn("audioPlayer not found during initialization.");
+    if (
+        originalTracks.length === 0
+    ) {
         return;
     }
 
-    player.addEventListener("play", () => updatePlayButtons(true));
-    player.addEventListener("pause", () => updatePlayButtons(false));
-    player.addEventListener("ended", () => updatePlayButtons(false));
-    player.addEventListener("error", () => {
-        console.error("Audio element error:", player.error);
-        updatePlayButtons(false);
-    });
+    currentOriginalIndex--;
+
+    if (
+        currentOriginalIndex < 0
+    ) {
+
+        currentOriginalIndex =
+            originalTracks.length - 1;
+    }
+
+    playOriginalTrack(
+        currentOriginalIndex
+    );
 }
 
+
 // ============================================================
-// UPDATE CREATIVITY
+// NEXT ORIGINAL TRACK
+// ============================================================
+
+function nextTrack() {
+
+    if (
+        originalTracks.length === 0
+    ) {
+        return;
+    }
+
+    currentOriginalIndex++;
+
+    if (
+        currentOriginalIndex >=
+        originalTracks.length
+    ) {
+
+        currentOriginalIndex = 0;
+    }
+
+    playOriginalTrack(
+        currentOriginalIndex
+    );
+}
+
+
+// ============================================================
+// AUDIO EVENTS
+// ============================================================
+
+function setupAudioEvents() {
+
+    const player =
+        getAudioPlayer();
+
+    if (!player) {
+
+        console.warn(
+            "audioPlayer not found."
+        );
+
+        return;
+    }
+
+    player.addEventListener(
+        "play",
+        () => {
+
+            updatePlayButtons(
+                true
+            );
+        }
+    );
+
+    player.addEventListener(
+        "pause",
+        () => {
+
+            updatePlayButtons(
+                false
+            );
+        }
+    );
+
+    player.addEventListener(
+        "ended",
+        () => {
+
+            updatePlayButtons(
+                false
+            );
+        }
+    );
+
+    player.addEventListener(
+        "error",
+        () => {
+
+            console.error(
+                "Audio element error:",
+                player.error
+            );
+
+            updatePlayButtons(
+                false
+            );
+        }
+    );
+}
+
+
+// ============================================================
+// CREATIVITY
 // ============================================================
 
 function updateCreativity() {
-    const slider = document.getElementById("creativity");
-    const value = document.getElementById("creativityValue");
 
-    if (!slider || !value) return;
+    const slider =
+        document.getElementById(
+            "creativity"
+        );
 
-    value.textContent = slider.value;
+    const value =
+        document.getElementById(
+            "creativityValue"
+        );
+
+    if (
+        !slider ||
+        !value
+    ) {
+        return;
+    }
+
+    value.textContent =
+        slider.value;
 }
+
 
 // ============================================================
 // FORMAT DURATION
 // ============================================================
 
-function formatDuration(totalSeconds) {
-    const seconds = Number(totalSeconds);
+function formatDuration(
+    totalSeconds
+) {
 
-    if (!Number.isFinite(seconds) || seconds < 0) {
+    const seconds =
+        Number(
+            totalSeconds
+        );
+
+    if (
+        !Number.isFinite(
+            seconds
+        ) ||
+        seconds < 0
+    ) {
+
         return "0:00";
     }
 
-    const minutes = Math.floor(seconds / 60);
-    const remainingSeconds = Math.floor(seconds % 60);
+    const minutes =
+        Math.floor(
+            seconds / 60
+        );
 
-    return minutes + ":" + String(remainingSeconds).padStart(2, "0");
+    const remainingSeconds =
+        Math.floor(
+            seconds % 60
+        );
+
+    return (
+        minutes +
+        ":" +
+        String(
+            remainingSeconds
+        ).padStart(
+            2,
+            "0"
+        )
+    );
 }
+
 
 // ============================================================
 // UPDATE DURATION
 // ============================================================
 
 function updateDuration() {
-    const slider = document.getElementById("duration");
-    const value = document.getElementById("durationValue");
 
-    if (!slider || !value) return;
+    const slider =
+        document.getElementById(
+            "duration"
+        );
 
-    value.textContent = formatDuration(slider.value);
-}
+    const value =
+        document.getElementById(
+            "durationValue"
+        );
 
-// ============================================================
-// GENERATE MUSIC
-// ============================================================
-
-async function generateMusic() {
-    const promptElement = document.getElementById("prompt");
-    const genreElement = document.getElementById("genre");
-    const durationElement = document.getElementById("duration");
-    const creativityElement = document.getElementById("creativity");
-    const button = document.querySelector(".generate-btn");
-    const buttonText = document.getElementById("generateText");
-    const status = document.getElementById("generationStatus");
-    const preview = document.getElementById("previewContent");
-
-    if (!promptElement || !genreElement || !durationElement || !creativityElement || !button || !buttonText || !status) {
-        console.error("Required generation UI element is missing.");
+    if (
+        !slider ||
+        !value
+    ) {
         return;
     }
 
-    const prompt = promptElement.value.trim();
-    const genre = genreElement.value;
-    const duration = Number(durationElement.value);
-    const creativity = Number(creativityElement.value);
+    value.textContent =
+        formatDuration(
+            slider.value
+        );
+}
+
+
+// ============================================================
+// AI MUSIC GENERATION
+// LOCAL BACKEND
+// ============================================================
+
+async function generateMusic() {
+
+    const promptElement =
+        document.getElementById(
+            "prompt"
+        );
+
+    const genreElement =
+        document.getElementById(
+            "genre"
+        );
+
+    const durationElement =
+        document.getElementById(
+            "duration"
+        );
+
+    const creativityElement =
+        document.getElementById(
+            "creativity"
+        );
+
+    const button =
+        document.querySelector(
+            ".generate-btn"
+        );
+
+    const buttonText =
+        document.getElementById(
+            "generateText"
+        );
+
+    const status =
+        document.getElementById(
+            "generationStatus"
+        );
+
+    const preview =
+        document.getElementById(
+            "previewContent"
+        );
+
+    if (
+        !promptElement ||
+        !genreElement ||
+        !durationElement ||
+        !creativityElement ||
+        !button ||
+        !buttonText ||
+        !status
+    ) {
+
+        console.error(
+            "Required generation UI element is missing."
+        );
+
+        return;
+    }
+
+    const prompt =
+        promptElement.value.trim();
+
+    const genre =
+        genreElement.value;
+
+    const duration =
+        Number(
+            durationElement.value
+        );
+
+    const creativity =
+        Number(
+            creativityElement.value
+        );
 
     // ========================================================
     // VALIDATION
     // ========================================================
 
     if (!prompt) {
-        status.textContent = "Please describe the music you want to create.";
+
+        status.textContent =
+            "Please describe the music you want to create.";
+
         promptElement.focus();
+
         return;
     }
 
-    if (!Number.isFinite(duration) || duration < 5 || duration > 300) {
-        status.textContent = "Please select a duration between 5 seconds and 5 minutes.";
+    if (!genre) {
+
+        status.textContent =
+            "Please choose a genre.";
+
+        genreElement.focus();
+
+        return;
+    }
+
+    if (
+        !Number.isFinite(
+            duration
+        ) ||
+        duration < 5 ||
+        duration > 300
+    ) {
+
+        status.textContent =
+            "Please select a duration between 5 seconds and 5 minutes.";
+
         return;
     }
 
     // ========================================================
-    // START GENERATION
+    // GENERATING STATE
     // ========================================================
 
     button.disabled = true;
-    buttonText.textContent = "⏳ Starting AI...";
-    status.textContent = `Starting your ${formatDuration(duration)} ${genre} track...`;
+
+    buttonText.textContent =
+        "⏳ Generating...";
+
+    status.textContent =
+        `AI is creating your ${formatDuration(duration)} ${genre} track. Please wait...`;
 
     try {
+
         // ====================================================
-        // START BACKGROUND JOB
+        // LOCAL FLASK BACKEND
         // ====================================================
 
-        const response = await fetch(`${API_BASE}/api/generate`, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json"
-            },
-            body: JSON.stringify({
-                prompt: prompt,
-                genre: genre,
-                duration: duration,
-                creativity: creativity
-            })
-        });
+        const response =
+            await fetch(
+                "/api/generate",
+                {
+                    method: "POST",
 
-        let startData;
+                    headers: {
+                        "Content-Type":
+                            "application/json"
+                    },
+
+                    body: JSON.stringify({
+
+                        prompt:
+                            prompt,
+
+                        genre:
+                            genre,
+
+                        duration:
+                            duration,
+
+                        creativity:
+                            creativity
+                    })
+                }
+            );
+
+        let data;
 
         try {
-            startData = await response.json();
-        } catch (jsonError) {
-            throw new Error(`Server returned an invalid response (${response.status}).`);
+
+            data =
+                await response.json();
+
+        } catch {
+
+            throw new Error(
+                `Server returned an invalid response (${response.status}).`
+            );
         }
 
-        if (!response.ok || !startData || !startData.success) {
-            throw new Error(startData?.error || "Music generation failed to start.");
+        if (
+            !response.ok ||
+            !data ||
+            !data.success
+        ) {
+
+            throw new Error(
+                data?.error ||
+                "Music generation failed."
+            );
         }
 
-        const jobId = startData.job_id;
+        const track =
+            data.track;
 
-        if (!jobId) {
-            throw new Error("The server did not return a generation job ID.");
-        }
+        if (
+            !track ||
+            !track.file
+        ) {
 
-        console.log("Generation job started:", jobId);
-
-        // ====================================================
-        // POLL STATUS
-        // ====================================================
-
-        let completedTrack = null;
-        const maxAttempts = 900;
-
-        for (let attempt = 0; attempt < maxAttempts; attempt++) {
-            await new Promise(resolve => setTimeout(resolve, 2000));
-
-            const statusResponse = await fetch(`${API_BASE}/api/generation-status/${jobId}`, {
-                method: "GET",
-                cache: "no-store"
-            });
-
-            if (!statusResponse.ok) {
-                console.warn("Status request failed:", statusResponse.status);
-                continue;
-            }
-
-            const statusData = await statusResponse.json();
-
-            // ==================================================
-            // QUEUED
-            // ==================================================
-
-            if (statusData.status === "queued") {
-                buttonText.textContent = "⏳ Queued...";
-                status.textContent = "Your music request is queued.";
-                continue;
-            }
-
-            // ==================================================
-            // GENERATING
-            // ==================================================
-
-            if (statusData.status === "generating") {
-                buttonText.textContent = "⏳ Generating...";
-                status.textContent = `AI is creating your ${formatDuration(duration)} track. Please wait...`;
-                continue;
-            }
-
-            // ==================================================
-            // FAILED
-            // ==================================================
-
-            if (statusData.status === "failed") {
-                throw new Error(statusData.message || "Music generation failed.");
-            }
-
-            // ==================================================
-            // COMPLETED
-            // ==================================================
-
-            if (statusData.status === "completed") {
-                completedTrack = statusData.track;
-                break;
-            }
-        }
-
-        if (!completedTrack) {
-            throw new Error("Music generation is taking longer than expected.");
-        }
-
-        if (!completedTrack.file) {
-            throw new Error("The server completed generation but did not return an audio file.");
+            throw new Error(
+                "The server generated the music but did not return the audio file."
+            );
         }
 
         // ====================================================
-        // CREATE TRACK OBJECT
+        // TRACK OBJECT
         // ====================================================
 
         const newTrack = {
-            id: completedTrack.id || Date.now(),
-            title: completedTrack.title || "AI Generated Track",
-            genre: completedTrack.genre || genre,
-            icon: completedTrack.icon || "🎵",
-            prompt: completedTrack.prompt || prompt,
-            file: resolveAudioUrl(completedTrack.file),
-            duration: completedTrack.duration || formatDuration(duration),
-            created_at: completedTrack.created_at || new Date().toISOString()
+
+            id:
+                track.id ||
+                Date.now(),
+
+            title:
+                track.title ||
+                "AI Generated Track",
+
+            genre:
+                track.genre ||
+                genre,
+
+            icon:
+                track.icon ||
+                "🎵",
+
+            prompt:
+                track.prompt ||
+                prompt,
+
+            file:
+                track.file,
+
+            duration:
+                track.duration ||
+                formatDuration(
+                    duration
+                ),
+
+            created_at:
+                track.created_at ||
+                new Date().toISOString()
         };
 
         // ====================================================
-        // ADD TO LIBRARY
+        // ADD TO MY LIBRARY ONLY
         // ====================================================
 
-        generatedTracks.unshift(newTrack);
+        generatedTracks.unshift(
+            newTrack
+        );
+
         renderLibrary();
 
         // ====================================================
-        // PREPARE PLAYER
+        // LOAD GENERATED AUDIO
         // ====================================================
 
-        const player = getAudioPlayer();
+        const player =
+            getAudioPlayer();
 
         if (player) {
-            currentTrack = newTrack;
+
+            currentTrack =
+                newTrack;
+
             player.pause();
-            player.removeAttribute("src");
+
+            player.src =
+                newTrack.file;
+
             player.load();
-            player.src = resolveAudioUrl(newTrack.file);
-            player.load();
-            updatePlayerInformation(newTrack);
+
+            updatePlayerInformation(
+                newTrack
+            );
+
+            // Automatically prepare playback,
+            // but don't force browser autoplay.
         }
 
         // ====================================================
@@ -711,79 +1269,152 @@ async function generateMusic() {
         // ====================================================
 
         if (preview) {
-            preview.className = "empty-preview";
+
+            preview.className =
+                "empty-preview";
+
             preview.innerHTML = `
                 <div class="generated-preview">
-                    <div class="big-note">♫</div>
-                    <h3>${escapeHTML(newTrack.title)}</h3>
+
+                    <div class="big-note">
+                        ♫
+                    </div>
+
+                    <h3>
+                        ${escapeHTML(
+                            newTrack.title
+                        )}
+                    </h3>
+
                     <p>
-                        ${escapeHTML(newTrack.genre)} •
-                        ${escapeHTML(newTrack.duration)} • Added to My Library
+                        ${escapeHTML(
+                            newTrack.genre
+                        )}
+                        •
+                        ${escapeHTML(
+                            newTrack.duration
+                        )}
+                        • Added to My Library
                     </p>
-                    <button type="button" class="primary-btn" style="margin-top:22px;" onclick="playGeneratedTrack(0)">
+
+                    <button
+                        type="button"
+                        class="primary-btn"
+                        style="margin-top:22px;"
+                        onclick="playGeneratedTrack(0)"
+                    >
                         ▶ Play Generated Track
                     </button>
+
                 </div>
             `;
         }
 
-        // ====================================================
-        // SUCCESS
-        // ====================================================
+        status.textContent =
+            "Music generated successfully and saved to My Library!";
 
-        status.textContent = "Music generated successfully and saved to My Library!";
         promptElement.value = "";
 
-        console.log("AI track generated:", newTrack);
+        console.log(
+            "AI track generated:",
+            newTrack
+        );
 
     } catch (error) {
-        console.error("Generation error:", error);
-        status.textContent = error.message || "Unable to generate music.";
+
+        console.error(
+            "Generation error:",
+            error
+        );
+
+        status.textContent =
+            error.message ||
+            "Unable to generate music.";
 
     } finally {
+
         button.disabled = false;
-        buttonText.textContent = "✨ Generate Music";
+
+        buttonText.textContent =
+            "✨ Generate Music";
     }
 }
+
 
 // ============================================================
 // ESCAPE HTML
 // ============================================================
 
 function escapeHTML(value) {
-    return String(value)
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#039;");
+
+    return String(
+        value
+    )
+        .replace(
+            /&/g,
+            "&amp;"
+        )
+        .replace(
+            /</g,
+            "&lt;"
+        )
+        .replace(
+            />/g,
+            "&gt;"
+        )
+        .replace(
+            /"/g,
+            "&quot;"
+        )
+        .replace(
+            /'/g,
+            "&#039;"
+        );
 }
+
 
 // ============================================================
 // INITIALIZE
 // ============================================================
 
-document.addEventListener("DOMContentLoaded", async () => {
-    audioPlayer = document.getElementById("audioPlayer");
+document.addEventListener(
+    "DOMContentLoaded",
+    async () => {
 
-    // Render original tracks
-    renderOriginalTracks();
+        audioPlayer =
+            document.getElementById(
+                "audioPlayer"
+            );
 
-    // Render empty/library state
-    renderLibrary();
+        renderOriginalTracks();
 
-    // Sliders
-    updateCreativity();
-    updateDuration();
+        renderLibrary();
 
-    // Audio events
-    setupAudioEvents();
+        updateCreativity();
 
-    // Load saved AI tracks
-    await loadLibraryFromServer();
+        updateDuration();
 
-    console.log("SoundForge initialized successfully.");
-    console.log("Backend mode: Same-origin Railway");
-    console.log("Original tracks:", originalTracks.length);
-    console.log("Library tracks:", generatedTracks.length);
-});
+        setupAudioEvents();
+
+        await loadLibraryFromServer();
+
+        console.log(
+            "SoundForge initialized successfully."
+        );
+
+        console.log(
+            "Backend mode:",
+            "Local Flask"
+        );
+
+        console.log(
+            "Original tracks:",
+            originalTracks.length
+        );
+
+        console.log(
+            "Library tracks:",
+            generatedTracks.length
+        );
+    }
+);
