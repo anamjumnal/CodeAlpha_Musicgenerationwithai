@@ -3,11 +3,8 @@ from flask_cors import CORS
 from pathlib import Path
 from datetime import datetime
 import uuid
-import threading
 import traceback
 import json
-import os
-import gc
 
 import numpy as np
 import scipy.io.wavfile
@@ -15,22 +12,25 @@ import torch
 from transformers import AutoProcessor, MusicgenForConditionalGeneration
 
 
-app = Flask(__name__)
+# ============================================================
+# SOUNDFORGE
+# ============================================================
 
-CORS(
-    app,
-    resources={
-        r"/api/*": {"origins": "*"},
-        r"/audio/*": {"origins": "*"},
-        r"/generated/*": {"origins": "*"}
-    }
-)
+app = Flask(__name__)
+CORS(app)
 
 BASE_DIR = Path(__file__).resolve().parent
+
 GENERATED_DIR = BASE_DIR / "generated"
 GENERATED_DIR.mkdir(exist_ok=True)
+
 LIBRARY_FILE = BASE_DIR / "library.json"
 
+
+# ============================================================
+# ORIGINAL 4 TRACKS
+# THESE ALWAYS STAY SEPARATE FROM MY LIBRARY
+# ============================================================
 
 ORIGINAL_TRACKS = [
     {
@@ -68,15 +68,60 @@ ORIGINAL_TRACKS = [
 ]
 
 
-generation_jobs = {}
-generation_jobs_lock = threading.Lock()
-model_lock = threading.Lock()
+# ============================================================
+# LIBRARY STORAGE
+# ============================================================
 
+def load_library():
+    if not LIBRARY_FILE.exists():
+        return []
+
+    try:
+        with open(
+            LIBRARY_FILE,
+            "r",
+            encoding="utf-8"
+        ) as f:
+            data = json.load(f)
+
+        if isinstance(data, list):
+            return data
+
+    except Exception:
+        traceback.print_exc()
+
+    return []
+
+
+def save_library(tracks):
+    try:
+        with open(
+            LIBRARY_FILE,
+            "w",
+            encoding="utf-8"
+        ) as f:
+            json.dump(
+                tracks,
+                f,
+                indent=4,
+                ensure_ascii=False
+            )
+
+        return True
+
+    except Exception:
+        traceback.print_exc()
+        return False
+
+
+# ============================================================
+# MUSICGEN
+# ============================================================
 
 MODEL_NAME = "facebook/musicgen-small"
+
 processor = None
 model = None
-model_loading_status = {"loaded": False, "loading": False, "error": None}
 
 
 def load_musicgen():
@@ -89,234 +134,360 @@ def load_musicgen():
     print("=" * 70)
     print("SOUNDFORGE - LOADING MUSICGEN")
     print("=" * 70)
-    print("Model: facebook/musicgen-small")
+    print("Model:", MODEL_NAME)
+    print("First load can take some time.")
     print("=" * 70)
 
-    try:
-        processor = AutoProcessor.from_pretrained(MODEL_NAME)
-        
-        model = MusicgenForConditionalGeneration.from_pretrained(
-            MODEL_NAME,
-            torch_dtype=torch.float16
+    processor = AutoProcessor.from_pretrained(
+        MODEL_NAME
+    )
+
+    model = MusicgenForConditionalGeneration.from_pretrained(
+        MODEL_NAME
+    )
+
+    model.to("cpu")
+    model.eval()
+
+    print("=" * 70)
+    print("MUSICGEN LOADED SUCCESSFULLY")
+    print("=" * 70)
+    print()
+
+
+# ============================================================
+# GENERATE MUSIC
+# ============================================================
+
+def generate_music_audio(
+    prompt,
+    genre,
+    creativity,
+    requested_duration
+):
+
+    requested_duration = int(
+        max(
+            5,
+            min(
+                int(requested_duration),
+                300
+            )
         )
+    )
 
-        model.to("cpu")
-        model.eval()
+    sampling_rate = int(
+        model.config.audio_encoder.sampling_rate
+    )
 
-        torch.cuda.empty_cache()
-        gc.collect()
-
-        print("=" * 70)
-        print("MUSICGEN LOADED SUCCESSFULLY")
-        print("=" * 70)
-        print()
-
-    except Exception as e:
-        traceback.print_exc()
-        raise e
-
-
-def load_musicgen_background():
-    model_loading_status["loading"] = True
-    try:
-        load_musicgen()
-        model_loading_status["loaded"] = True
-        model_loading_status["error"] = None
-    except Exception as e:
-        traceback.print_exc()
-        model_loading_status["error"] = str(e)
-    finally:
-        model_loading_status["loading"] = False
-
-
-def load_library():
-    if not LIBRARY_FILE.exists():
-        return []
-    try:
-        with open(LIBRARY_FILE, "r", encoding="utf-8") as f:
-            data = json.load(f)
-            if isinstance(data, list):
-                return data
-    except Exception:
-        traceback.print_exc()
-    return []
-
-
-def save_library(tracks):
-    try:
-        with open(LIBRARY_FILE, "w", encoding="utf-8") as f:
-            json.dump(tracks, f, indent=4, ensure_ascii=False)
-        return True
-    except Exception:
-        traceback.print_exc()
-        return False
-
-
-def find_file_by_name(filename):
-    filename = Path(filename).name
-    direct = BASE_DIR / filename
-    if direct.is_file():
-        return direct
-    try:
-        for candidate in BASE_DIR.rglob(filename):
-            if candidate.is_file():
-                return candidate
-    except Exception:
-        traceback.print_exc()
-    return None
-
-
-def normalize_audio(audio):
-    audio = np.asarray(audio, dtype=np.float32)
-    if audio.size == 0:
-        return audio
-    peak = np.max(np.abs(audio))
-    if peak > 0:
-        audio = (audio / peak) * 0.95
-    return audio.astype(np.float32)
-
-
-def generate_music_simple(prompt, genre, duration_seconds, temperature):
-    duration_seconds = max(5.0, min(float(duration_seconds), 30.0))
+    target_samples = (
+        sampling_rate * requested_duration
+    )
 
     full_prompt = (
-        f"{genre} music. "
+        f"{genre} instrumental music. "
         f"{prompt}. "
-        f"No vocals."
+        f"No vocals. "
+        f"High quality musical composition. "
+        f"Natural dynamics, musical progression, "
+        f"clear melody and coherent arrangement."
     )
 
-    print(f"Generating {duration_seconds:.1f}s of {genre} music...")
-
-    inputs = processor(
-        text=[full_prompt],
-        padding=True,
-        return_tensors="pt"
+    print()
+    print("=" * 70)
+    print("NEW SOUNDFORGE AI GENERATION")
+    print("=" * 70)
+    print("Genre:", genre)
+    print("Prompt:", full_prompt)
+    print(
+        "Requested duration:",
+        requested_duration,
+        "seconds"
     )
+    print(
+        "Creativity:",
+        creativity
+    )
+    print("=" * 70)
 
-    max_new_tokens = int(duration_seconds * 25) + 30
+    chunks = []
 
-    with torch.no_grad():
-        audio_values = model.generate(
-            **inputs,
-            do_sample=True,
-            temperature=temperature,
-            guidance_scale=1.0,
-            max_new_tokens=max_new_tokens
+    remaining = requested_duration
+    chunk_number = 1
+
+    while remaining > 0:
+
+        chunk_duration = min(
+            remaining,
+            30
         )
 
-    audio = audio_values[0].cpu().numpy()
-    audio = np.squeeze(audio)
+        print(
+            f"\nGenerating section "
+            f"{chunk_number}: "
+            f"{chunk_duration} seconds"
+        )
 
-    if audio.ndim > 1:
-        audio = audio[0]
+        if chunk_number == 1:
 
-    return audio.astype(np.float32)
+            chunk_prompt = full_prompt
 
+        else:
 
-def run_generation_job(job_id, prompt, genre, creativity, requested_duration):
-    try:
-        with generation_jobs_lock:
-            generation_jobs[job_id] = {
-                "status": "generating",
-                "message": "AI is generating your music.",
-                "track": None
-            }
-
-        requested_duration = min(requested_duration, 30)
-
-        with model_lock:
-            audio = generate_music_simple(
-                prompt,
-                genre,
-                requested_duration,
-                creativity
+            chunk_prompt = (
+                full_prompt
+                +
+                " Continue the same instrumental "
+                "composition naturally with variation "
+                "and development. Do not simply repeat "
+                "the previous section."
             )
 
-        audio = normalize_audio(audio)
-        sample_rate = int(model.config.audio_encoder.sampling_rate)
+        inputs = processor(
+            text=[chunk_prompt],
+            padding=True,
+            return_tensors="pt"
+        )
 
-        filename = f"ai_generated_{job_id}.wav"
-        output_path = GENERATED_DIR / filename
+        max_new_tokens = (
+            int(
+                np.ceil(
+                    (chunk_duration + 1) * 50
+                )
+            )
+            + 60
+        )
 
-        scipy.io.wavfile.write(str(output_path), sample_rate, audio)
+        print(
+            "Generating approximately",
+            chunk_duration,
+            "seconds..."
+        )
 
-        if not output_path.exists():
-            raise RuntimeError("Generated WAV file was not created.")
+        with torch.no_grad():
 
-        actual_duration = len(audio) / sample_rate
-        minutes = int(actual_duration // 60)
-        seconds = int(actual_duration % 60)
-        duration_text = f"{minutes}:{seconds:02d}"
+            audio_values = model.generate(
+                **inputs,
+                do_sample=True,
+                temperature=creativity,
+                guidance_scale=3.0,
+                max_new_tokens=max_new_tokens
+            )
 
-        audio_url = f"/generated/{filename}"
+        audio = (
+            audio_values[0]
+            .cpu()
+            .numpy()
+        )
 
-        track = {
-            "id": job_id,
-            "title": "AI Generated Track",
-            "genre": genre,
-            "icon": "🎵",
-            "file": audio_url,
-            "audio_url": audio_url,
-            "duration": duration_text,
-            "prompt": prompt,
-            "created_at": datetime.now().isoformat()
-        }
+        audio = np.squeeze(audio)
 
-        library = load_library()
-        library.insert(0, track)
-        save_library(library)
+        if audio.ndim > 1:
+            audio = audio[0]
 
-        with generation_jobs_lock:
-            generation_jobs[job_id] = {
-                "status": "completed",
-                "message": "Music generated successfully.",
-                "track": track
-            }
+        audio = audio.astype(
+            np.float32
+        )
 
-        print()
-        print("=" * 70)
-        print("GENERATION SUCCESSFUL")
-        print("=" * 70)
-        print("Job ID:", job_id)
-        print("Duration:", duration_text)
-        print("=" * 70)
+        target_chunk_samples = (
+            int(
+                sampling_rate
+                * chunk_duration
+            )
+        )
 
-        gc.collect()
+        audio = audio[
+            :target_chunk_samples
+        ]
 
-    except Exception as e:
-        traceback.print_exc()
-        with generation_jobs_lock:
-            generation_jobs[job_id] = {
-                "status": "failed",
-                "message": str(e),
-                "track": None
-            }
+        chunks.append(audio)
 
+        remaining -= chunk_duration
+        chunk_number += 1
+
+    # ========================================================
+    # JOIN CHUNKS
+    # ========================================================
+
+    final_audio = chunks[0]
+
+    for next_chunk in chunks[1:]:
+
+        crossfade_samples = min(
+            int(
+                sampling_rate * 0.5
+            ),
+            len(final_audio),
+            len(next_chunk)
+        )
+
+        if crossfade_samples <= 0:
+
+            final_audio = np.concatenate(
+                [
+                    final_audio,
+                    next_chunk
+                ]
+            )
+
+            continue
+
+        first_main = final_audio[
+            :-crossfade_samples
+        ]
+
+        first_tail = final_audio[
+            -crossfade_samples:
+        ]
+
+        second_head = next_chunk[
+            :crossfade_samples
+        ]
+
+        second_rest = next_chunk[
+            crossfade_samples:
+        ]
+
+        fade_out = np.linspace(
+            1.0,
+            0.0,
+            crossfade_samples,
+            dtype=np.float32
+        )
+
+        fade_in = np.linspace(
+            0.0,
+            1.0,
+            crossfade_samples,
+            dtype=np.float32
+        )
+
+        blended = (
+            first_tail * fade_out
+            +
+            second_head * fade_in
+        )
+
+        final_audio = np.concatenate(
+            [
+                first_main,
+                blended,
+                second_rest
+            ]
+        )
+
+    # ========================================================
+    # EXACT LENGTH
+    # ========================================================
+
+    final_audio = final_audio[
+        :target_samples
+    ]
+
+    # ========================================================
+    # NORMALIZE
+    # ========================================================
+
+    peak = np.max(
+        np.abs(final_audio)
+    )
+
+    if peak > 0:
+        final_audio = (
+            final_audio / peak
+        ) * 0.95
+
+    final_audio = final_audio.astype(
+        np.float32
+    )
+
+    print(
+        "Final duration:",
+        f"{len(final_audio) / sampling_rate:.2f}s"
+    )
+
+    return (
+        final_audio,
+        sampling_rate
+    )
+
+
+# ============================================================
+# HOME
+# ============================================================
 
 @app.route("/")
 def home():
-    return send_from_directory(BASE_DIR, "SoundForge.html")
 
+    return send_from_directory(
+        BASE_DIR,
+        "SoundForge.html"
+    )
+
+
+# ============================================================
+# CSS
+# ============================================================
 
 @app.route("/style.css")
 def css():
-    return send_from_directory(BASE_DIR, "style.css")
 
+    return send_from_directory(
+        BASE_DIR,
+        "style.css"
+    )
+
+
+# ============================================================
+# JAVASCRIPT
+# ============================================================
 
 @app.route("/script.js")
 def javascript():
-    return send_from_directory(BASE_DIR, "script.js")
 
+    return send_from_directory(
+        BASE_DIR,
+        "script.js"
+    )
+
+
+# ============================================================
+# ORIGINAL AUDIO
+# ============================================================
 
 @app.route("/audio/<path:filename>")
 def original_audio(filename):
-    found_file = find_file_by_name(filename)
-    if found_file:
+
+    filename = Path(
+        filename
+    ).name
+
+    # First check project root
+    root_file = BASE_DIR / filename
+
+    if root_file.exists():
+
         return send_from_directory(
-            found_file.parent,
-            found_file.name,
+            BASE_DIR,
+            filename,
             mimetype="audio/wav"
         )
+
+    # Then check audio folder
+    audio_dir = BASE_DIR / "audio"
+
+    audio_file = (
+        audio_dir / filename
+    )
+
+    if audio_file.exists():
+
+        return send_from_directory(
+            audio_dir,
+            filename,
+            mimetype="audio/wav"
+        )
+
     return jsonify({
         "success": False,
         "error": "Original audio file not found.",
@@ -324,176 +495,451 @@ def original_audio(filename):
     }), 404
 
 
+# ============================================================
+# GENERATED AUDIO
+# ============================================================
+
 @app.route("/generated/<path:filename>")
 def generated_audio(filename):
-    file_path = GENERATED_DIR / Path(filename).name
+
+    filename = Path(
+        filename
+    ).name
+
+    file_path = (
+        GENERATED_DIR / filename
+    )
+
     if not file_path.exists():
+
         return jsonify({
             "success": False,
             "error": "Generated audio file not found."
         }), 404
+
     return send_from_directory(
         GENERATED_DIR,
-        file_path.name,
+        filename,
         mimetype="audio/wav"
     )
 
 
-@app.route("/api/library", methods=["GET"])
+# ============================================================
+# LIBRARY
+# ============================================================
+
+@app.route(
+    "/api/library",
+    methods=["GET"]
+)
 def get_library():
+
+    tracks = load_library()
+
+    valid_tracks = []
+
+    for track in tracks:
+
+        filename = Path(
+            track.get(
+                "file",
+                ""
+            )
+        ).name
+
+        file_path = (
+            GENERATED_DIR / filename
+        )
+
+        if file_path.exists():
+            valid_tracks.append(track)
+
+    if len(valid_tracks) != len(tracks):
+
+        save_library(
+            valid_tracks
+        )
+
     return jsonify({
         "success": True,
-        "tracks": load_library()
+        "tracks": valid_tracks
     })
 
 
-@app.route("/api/health", methods=["GET"])
+# ============================================================
+# HEALTH
+# ============================================================
+
+@app.route(
+    "/api/health",
+    methods=["GET"]
+)
 def health():
-    original_files = []
-    for track in ORIGINAL_TRACKS:
-        found = find_file_by_name(track["file"])
-        original_files.append({
-            "file": track["file"],
-            "exists": found is not None
-        })
 
     return jsonify({
+
         "online": True,
-        "project": "SoundForge",
-        "ai_provider": "Local MusicGen",
-        "model": MODEL_NAME,
-        "model_loaded": model_loading_status["loaded"],
-        "model_loading": model_loading_status["loading"],
-        "model_error": model_loading_status["error"],
-        "original_tracks": len(ORIGINAL_TRACKS),
-        "original_files": original_files,
-        "library_tracks": len(load_library()),
-        "duration_support": "5-30 seconds"
+
+        "project":
+            "SoundForge",
+
+        "model":
+            MODEL_NAME,
+
+        "model_loaded":
+            model is not None,
+
+        "original_tracks":
+            len(ORIGINAL_TRACKS),
+
+        "library_tracks":
+            len(load_library()),
+
+        "ai_generation":
+            True,
+
+        "duration_support":
+            "5-300 seconds"
     })
 
 
-@app.route("/api/tracks", methods=["GET"])
+# ============================================================
+# ORIGINAL TRACK API
+# ============================================================
+
+@app.route(
+    "/api/tracks",
+    methods=["GET"]
+)
 def get_tracks():
+
     tracks = []
+
     for track in ORIGINAL_TRACKS:
+
         tracks.append({
             **track,
-            "file": "/audio/" + track["file"]
+            "file":
+                "/audio/"
+                +
+                track["file"]
         })
+
     return jsonify({
         "success": True,
         "tracks": tracks
     })
 
 
-@app.route("/api/generate", methods=["POST"])
-def start_generation():
+# ============================================================
+# AI GENERATION
+# ============================================================
+
+@app.route(
+    "/api/generate",
+    methods=["POST"]
+)
+def generate_music():
+
     try:
-        if not model_loading_status["loaded"]:
-            return jsonify({
-                "success": False,
-                "error": "Model is still loading. Please try again shortly."
-                         if model_loading_status["loading"]
-                         else f"Model failed to load: {model_loading_status['error']}"
-            }), 503
 
-        data = request.get_json(silent=True) or {}
+        data = (
+            request.get_json(
+                silent=True
+            )
+            or {}
+        )
 
-        prompt = str(data.get("prompt", "")).strip()
-        genre = str(data.get("genre", "")).strip()
+        prompt = str(
+            data.get(
+                "prompt",
+                ""
+            )
+        ).strip()
+
+        genre = str(
+            data.get(
+                "genre",
+                ""
+            )
+        ).strip()
 
         try:
-            requested_duration = int(float(data.get("duration", 10)))
-        except (TypeError, ValueError):
+
+            requested_duration = int(
+                float(
+                    data.get(
+                        "duration",
+                        10
+                    )
+                )
+            )
+
+        except (
+            TypeError,
+            ValueError
+        ):
+
             requested_duration = 10
-        
-        requested_duration = max(5, min(requested_duration, 30))
+
+        requested_duration = max(
+            5,
+            min(
+                requested_duration,
+                300
+            )
+        )
 
         try:
-            creativity = float(data.get("creativity", 0.8))
-        except (TypeError, ValueError):
+
+            creativity = float(
+                data.get(
+                    "creativity",
+                    0.8
+                )
+            )
+
+        except (
+            TypeError,
+            ValueError
+        ):
+
             creativity = 0.8
-        
-        creativity = max(0.5, min(creativity, 1.5))
+
+        creativity = max(
+            0.5,
+            min(
+                creativity,
+                1.5
+            )
+        )
 
         if not prompt:
+
             return jsonify({
                 "success": False,
-                "error": "Please enter a music prompt."
+                "error":
+                    "Please enter a music prompt."
             }), 400
 
         if not genre:
+
             return jsonify({
                 "success": False,
-                "error": "Please choose a genre."
+                "error":
+                    "Please choose a genre."
             }), 400
 
-        job_id = uuid.uuid4().hex[:10]
+        # ====================================================
+        # LOAD MODEL
+        # ====================================================
 
-        with generation_jobs_lock:
-            generation_jobs[job_id] = {
-                "status": "queued",
-                "message": "Generation queued.",
-                "track": None
-            }
+        load_musicgen()
 
-        worker = threading.Thread(
-            target=run_generation_job,
-            args=(job_id, prompt, genre, creativity, requested_duration),
-            daemon=True
+        # ====================================================
+        # GENERATE
+        # ====================================================
+
+        audio, sampling_rate = (
+            generate_music_audio(
+                prompt,
+                genre,
+                creativity,
+                requested_duration
+            )
         )
-        worker.start()
+
+        # ====================================================
+        # SAVE FILE
+        # ====================================================
+
+        track_id = uuid.uuid4().hex[:10]
+
+        filename = (
+            f"ai_generated_{track_id}.wav"
+        )
+
+        output_path = (
+            GENERATED_DIR / filename
+        )
+
+        scipy.io.wavfile.write(
+            str(output_path),
+            sampling_rate,
+            audio
+        )
+
+        if not output_path.exists():
+
+            raise RuntimeError(
+                "Generated WAV file was not created."
+            )
+
+        # ====================================================
+        # AUDIO URL
+        # ====================================================
+
+        audio_url = (
+            f"/generated/{filename}"
+        )
+
+        # ====================================================
+        # ACTUAL DURATION
+        # ====================================================
+
+        actual_duration = (
+            len(audio)
+            / sampling_rate
+        )
+
+        minutes = int(
+            actual_duration // 60
+        )
+
+        seconds = int(
+            actual_duration % 60
+        )
+
+        duration_text = (
+            f"{minutes}:{seconds:02d}"
+        )
+
+        # ====================================================
+        # TRACK OBJECT
+        # ====================================================
+
+        track = {
+
+            "id":
+                track_id,
+
+            "title":
+                "AI Generated Track",
+
+            "genre":
+                genre,
+
+            "icon":
+                "🎵",
+
+            "file":
+                audio_url,
+
+            "audio_url":
+                audio_url,
+
+            "duration":
+                duration_text,
+
+            "prompt":
+                prompt,
+
+            "created_at":
+                datetime.now().isoformat()
+        }
+
+        # ====================================================
+        # SAVE TO MY LIBRARY
+        # ====================================================
+
+        library = load_library()
+
+        library.insert(
+            0,
+            track
+        )
+
+        save_library(
+            library
+        )
+
+        # ====================================================
+        # SUCCESS
+        # ====================================================
+
+        print()
+        print("=" * 70)
+        print("GENERATION SUCCESSFUL")
+        print("=" * 70)
+        print("File:", output_path)
+        print(
+            "Duration:",
+            duration_text
+        )
+        print("=" * 70)
 
         return jsonify({
-            "success": True,
-            "job_id": job_id,
-            "status": "queued",
-            "message": "Music generation started."
-        }), 202
+
+            "success":
+                True,
+
+            "message":
+                "AI music generated and saved to My Library.",
+
+            "track":
+                track
+        })
 
     except Exception as e:
+
+        print()
+        print("=" * 70)
+        print("SOUNDFORGE MUSICGEN ERROR")
+        print("=" * 70)
+
         traceback.print_exc()
+
+        print("=" * 70)
+
         return jsonify({
-            "success": False,
-            "error": str(e)
+
+            "success":
+                False,
+
+            "error":
+                str(e)
         }), 500
 
 
-@app.route("/api/generation-status/<job_id>", methods=["GET"])
-def generation_status(job_id):
-    with generation_jobs_lock:
-        job = generation_jobs.get(job_id)
-
-    if job is None:
-        return jsonify({
-            "success": False,
-            "error": "Generation job not found."
-        }), 404
-
-    return jsonify({
-        "success": True,
-        "job_id": job_id,
-        "status": job.get("status", "unknown"),
-        "message": job.get("message", ""),
-        "track": job.get("track")
-    })
-
+# ============================================================
+# START SERVER
+# ============================================================
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
-
-    # Don't load model on startup - load it on first use
-    # threading.Thread(target=load_musicgen_background, daemon=True).start()
 
     print()
     print("=" * 70)
-    print("SOUNDFORGE - Ready to generate!")
+    print("SOUNDFORGE AI MUSIC GENERATOR")
+    print("=" * 70)
+    print(
+        "Website:",
+        "http://127.0.0.1:5000"
+    )
+    print(
+        "AI Model:",
+        MODEL_NAME
+    )
+    print(
+        "Original tracks:",
+        len(ORIGINAL_TRACKS)
+    )
+    print(
+        "Library:",
+        LIBRARY_FILE
+    )
+    print(
+        "Generated:",
+        GENERATED_DIR
+    )
+    print(
+        "Duration support:",
+        "5-300 seconds"
+    )
     print("=" * 70)
     print()
 
     app.run(
-        host="0.0.0.0",
-        port=port,
-        debug=False,
-        threaded=True
+        host="127.0.0.1",
+        port=5000,
+        debug=True
     )
